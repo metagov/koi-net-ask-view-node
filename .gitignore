@@ -1,0 +1,8 @@
+.venv
+.env
+.rid_cache
+*.ndjson
+*.json
+__pycache__
+config.yaml
+priv_key.pem
