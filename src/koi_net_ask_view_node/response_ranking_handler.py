@@ -121,7 +121,7 @@ class ResponseRankingHandler(KnowledgeHandler):
             *self.response_block(ranked_responses.accepted_answer.response, "Accepted Answer - ✅")
         ])
         
-        blocks.extend(self.topic_group_blocks(ranked_responses.thread))
+        # blocks.extend(self.topic_group_blocks(ranked_responses.thread))
         
         return blocks
         
