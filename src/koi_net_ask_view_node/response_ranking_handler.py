@@ -8,10 +8,20 @@ from rid_lib.types import SlackMessage
 from slack_bolt import App
 
 from .config import AskViewNodeConfig
-
-from .models import AskCoreResponseModel, AskCoreThreadModel, RankedResponsesModel, ThreadLinkModel, TopicGroupModel
-
-from .rid_types import AskCoreResponse, AskCoreThread, AskRankedResponses, AskTopicGroup, ThreadLink
+from .models import (
+    AskCoreResponseModel,
+    AskCoreThreadModel,
+    RankedResponsesModel,
+    ThreadLinkModel,
+    TopicGroupModel
+)
+from .rid_types import (
+    AskCoreResponse,
+    AskCoreThread,
+    AskRankedResponses,
+    AskTopicGroup,
+    ThreadLink
+)
 
 
 @dataclass
@@ -25,46 +35,6 @@ class ResponseRankingHandler(KnowledgeHandler):
     handler_type = HandlerType.Network
     rid_types = (AskRankedResponses,)
     
-    def response_block(self, response_rid: AskCoreResponse | None, intro: str) -> list[dict]:
-        if not response_rid:
-            return []
-        
-        response_bundle = self.effector.deref(response_rid, use_network=True)
-        if not response_bundle:
-            self.log.warning("Failed to find response bundle")
-            return []
-        
-        response = response_bundle.validate_contents(AskCoreResponseModel)
-        
-        return [
-            {
-                "type": "divider"
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": intro
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": response.content
-                }
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"Answered by <@{response.author.user_id}>"
-                    }
-                ]
-            }
-        ]
-        
     def topic_group_blocks(self, thread: AskCoreThread):
         for topic_group_rid in self.cache.list_rids([AskTopicGroup]):
             topic_group_bundle = self.cache.read(topic_group_rid)
@@ -89,7 +59,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": thread.prompt
+                    "text": "> " + thread.prompt
                 }
             },
             {
@@ -103,23 +73,43 @@ class ResponseRankingHandler(KnowledgeHandler):
             }
         ]
         
-        # if (
-        #     ranked_responses.community_voted.response or
-        #     ranked_responses.staff_pick.response or
-        #     ranked_responses.accepted_answer
-        # ):
-        #     blocks.append({"type": "divider"})
-            
-        # if ranked_responses.community_voted.response:
-        #     blocks.append(
-                
-        #     )
+        message_map: dict[SlackMessage, list] = {}
+        message_map.setdefault(ranked_responses.community_voted.response, []).append("Community Voted :+1:")
+        message_map.setdefault(ranked_responses.staff_pick.response, []).append("Staff Pick :sports_medal:")
+        message_map.setdefault(ranked_responses.accepted_answer.response, []).append("Accepted Answer :white_check_mark:")
         
-        blocks.extend([
-            *self.response_block(ranked_responses.community_voted.response, "Community Voted - 👍"),
-            *self.response_block(ranked_responses.staff_pick.response, "Staff Pick - 🏅"),
-            *self.response_block(ranked_responses.accepted_answer.response, "Accepted Answer - ✅")
-        ])
+        for message, rankings in message_map.items():
+            if message is None:
+                continue
+            
+            response_bundle = self.effector.deref(message, use_network=True)
+            if not response_bundle:
+                self.log.warning("Failed to find response bundle")
+            
+            response = response_bundle.validate_contents(AskCoreResponseModel)
+            ranking_str = " + ".join(sorted(rankings))
+            
+            blocks.extend([
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "> " + response.content
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"Answered by <@{response.author.user_id}> — {ranking_str}"
+                        }
+                    ]
+                }
+            ])
         
         # blocks.extend(self.topic_group_blocks(ranked_responses.thread))
         

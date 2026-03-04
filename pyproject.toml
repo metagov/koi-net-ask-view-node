@@ -8,7 +8,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "koi-net==1.3.0b12",
+    "koi-net~=1.3.1",
     "slack-bolt>=1.27.0",
 ]
 
