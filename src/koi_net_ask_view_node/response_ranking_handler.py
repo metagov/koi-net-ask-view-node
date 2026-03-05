@@ -63,6 +63,8 @@ class ResponseRankingHandler(KnowledgeHandler):
                 topic_group_names.append(topic_group.name)
                 
         topic_group_str = " + ".join(topic_group_names)
+        if len(topic_group_str) > 0:
+            topic_group_str = "— " + topic_group_str
         
         blocks = [
             {
@@ -77,7 +79,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"Asked by *{asker_ref}* — {topic_group_str}"
+                        "text": f"Asked by *{asker_ref}* {topic_group_str}"
                     }
                 ]
             },
