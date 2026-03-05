@@ -1,6 +1,8 @@
 from koi_net.core import FullNode
 from slack_bolt import App
 
+from .deref_handlers import SlackUserDereferencer
+
 from .response_ranking_handler import ResponseRankingHandler
 
 from .socket_mode import SlackSocketMode
@@ -16,3 +18,4 @@ class AskViewNode(FullNode):
     
     socket_mode = SlackSocketMode
     response_ranking_handler = ResponseRankingHandler
+    slack_user_dereferencer = SlackUserDereferencer

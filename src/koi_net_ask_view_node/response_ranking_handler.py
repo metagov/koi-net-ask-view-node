@@ -33,33 +33,43 @@ class ResponseRankingHandler(KnowledgeHandler):
     config: AskViewNodeConfig
     
     handler_type = HandlerType.Network
-    rid_types = (AskRankedResponses,)
-    
-    def topic_group_blocks(self, thread: AskCoreThread):
-        for topic_group_rid in self.cache.list_rids([AskTopicGroup]):
-            topic_group_bundle = self.cache.read(topic_group_rid)
-            if not topic_group_bundle: continue
-            
-            topic_group = topic_group_bundle.validate_contents(TopicGroupModel)
-            
-            if thread in topic_group.threads:
-                self.log.info(f"Thread found in {topic_group.handle}")
-        
+    rid_types = (AskRankedResponses, AskTopicGroup)
     
     def render_blocks(self, ranked_responses: RankedResponsesModel) -> list[dict]:
-        thread_bundle = self.effector.deref(ranked_responses.thread, use_network=True)
+        thread_rid = ranked_responses.thread
+        thread_bundle = self.effector.deref(thread_rid, use_network=True)
         if not thread_bundle:
             self.log.warning("Failed to find thread bundle")
             return
         
         thread = thread_bundle.validate_contents(AskCoreThreadModel)
         
+        asker_ref = self.effector.deref(thread.asker).contents.get("real_name", f"<@{thread.asker.user_id}>")
+        
+        topic_group_names = []
+        self.log.debug("Searching topic groups...")
+        for topic_group_rid in self.cache.list_rids(rid_types=[AskTopicGroup]):
+            self.log.debug(topic_group_rid)
+            
+            topic_group_bundle = self.cache.read(topic_group_rid)
+            if not topic_group_bundle: continue
+            
+            topic_group = topic_group_bundle.validate_contents(TopicGroupModel)
+            
+            self.log.debug(f"{topic_group.name} -> {topic_group.threads}")
+            
+            if thread_rid in topic_group.threads:
+                self.log.info(f"Thread found in {topic_group.handle}")
+                topic_group_names.append(topic_group.name)
+                
+        topic_group_str = " + ".join(topic_group_names)
+        
         blocks = [
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "> " + thread.prompt
+                    "text": "*Prompt:*\n> " + thread.prompt
                 }
             },
             {
@@ -67,10 +77,19 @@ class ResponseRankingHandler(KnowledgeHandler):
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"Asked by <@{thread.asker.user_id}>"
+                        "text": f"Asked by *{asker_ref}* — {topic_group_str}"
                     }
                 ]
-            }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"<{thread.permalink}|Jump to thread>"
+                    }
+                ]
+            },
         ]
         
         message_map: dict[SlackMessage, list] = {}
@@ -78,6 +97,7 @@ class ResponseRankingHandler(KnowledgeHandler):
         message_map.setdefault(ranked_responses.staff_pick.response, []).append("Staff Pick :sports_medal:")
         message_map.setdefault(ranked_responses.accepted_answer.response, []).append("Accepted Answer :white_check_mark:")
         
+        first_response = True
         for message, rankings in message_map.items():
             if message is None:
                 continue
@@ -89,15 +109,19 @@ class ResponseRankingHandler(KnowledgeHandler):
             response = response_bundle.validate_contents(AskCoreResponseModel)
             ranking_str = " + ".join(sorted(rankings))
             
+            author_ref = self.effector.deref(response.author).contents.get("real_name", f"<@{response.author.user_id}>")
+            
+            prefix = ""
+            if first_response:
+                prefix = "*Responses:*\n"
+                first_response = False
+            
             blocks.extend([
-                {
-                    "type": "divider"
-                },
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "> " + response.content
+                        "text": prefix + "> " + response.content
                     }
                 },
                 {
@@ -105,20 +129,41 @@ class ResponseRankingHandler(KnowledgeHandler):
                     "elements": [
                         {
                             "type": "mrkdwn",
-                            "text": f"Answered by <@{response.author.user_id}> — {ranking_str}"
+                            "text": f"Answered by *{author_ref}* — {ranking_str}"
                         }
                     ]
                 }
             ])
-        
-        # blocks.extend(self.topic_group_blocks(ranked_responses.thread))
+            
+        blocks.append({"type": "divider"})
         
         return blocks
         
     
     def handle(self, kobj: KnowledgeObject):
-        ranked_responses = kobj.bundle.validate_contents(RankedResponsesModel)
-        
+        if type(kobj.rid) is AskRankedResponses:
+            self.log.info("processing ranked responses")
+            ranked_responses = kobj.bundle.validate_contents(RankedResponsesModel)
+            self.process_ranked_responses(ranked_responses)
+            
+        elif type(kobj.rid) is AskTopicGroup:
+            self.log.info("processing topic group")
+            topic_group = kobj.bundle.validate_contents(TopicGroupModel)
+            for thread_rid in topic_group.threads:
+                ranked_response_rid = AskRankedResponses(
+                    team_id=thread_rid.team_id,
+                    channel_id=thread_rid.channel_id,
+                    ts=thread_rid.ts
+                )
+                
+                ranked_responses_bundle = self.cache.read(ranked_response_rid)
+                if not ranked_responses_bundle:
+                    continue
+                
+                ranked_responses = ranked_responses_bundle.validate_contents(RankedResponsesModel)
+                self.process_ranked_responses(ranked_responses)
+                
+    def process_ranked_responses(self, ranked_responses: RankedResponsesModel):
         thread_link_rid = ThreadLink(
             team_id=ranked_responses.thread.team_id,
             channel_id=ranked_responses.thread.channel_id,
@@ -146,7 +191,8 @@ class ResponseRankingHandler(KnowledgeHandler):
             msg = self.slack_app.client.chat_postMessage(
                 channel=self.config.ask_view.slack_channel_id,
                 blocks=blocks,
-                text=""
+                text="",
+                unfurl_links=False
             )
             
             thread_link = ThreadLinkModel(
