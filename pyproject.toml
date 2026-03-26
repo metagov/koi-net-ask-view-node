@@ -1,16 +1,16 @@
 [project]
 name = "koi-net-ask-view-node"
 version = "0.1.0"
-description = "SET NODE DESCRIPTION"
+description = "View KOI-net node for ask network application."
 authors = [
     {name = "Luke Miller", email = "luke@metagov.org"}
 ]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "koi-net~=1.3.1",
+    "koi-net~=2.0",
     "slack-bolt>=1.27.0",
 ]
 
 [project.urls]
-# Homepage = "SET TO NODE REPO URL"
+Homepage = "https://github.com/metagov/koi-net-ask-view-node"
