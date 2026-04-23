@@ -67,7 +67,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "*Prompt:*\n> " + self.format_text(thread.prompt)
+                    "text": "*Prompt:*\n" + self.format_text(thread.prompt)
                 }
             },
             {
@@ -138,7 +138,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": prefix + "> " + self.format_text(response.content)
+                        "text": prefix + self.format_text(response.content)
                     }
                 },
                 {
