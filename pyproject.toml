@@ -1,6 +1,6 @@
 [project]
 name = "koi-net-ask-view-node"
-version = "0.1.0"
+version = "0.2.0"
 description = "View KOI-net node for ask network application."
 authors = [
     {name = "Luke Miller", email = "luke@metagov.org"}

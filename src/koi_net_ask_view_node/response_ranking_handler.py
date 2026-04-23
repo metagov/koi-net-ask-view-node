@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 from koi_net.components import Cache, Effector, KobjQueue
 from koi_net.components.interfaces import KnowledgeHandler, HandlerType
@@ -35,6 +36,16 @@ class ResponseRankingHandler(KnowledgeHandler):
     handler_type = HandlerType.Network
     rid_types = (AskRankedResponses, AskTopicGroup)
     
+    def sanitize_text(self, text: str):
+        text = text.replace("<!everyone>", "@ everyone")
+        text = text.replace("@everyone", "@ everyone")
+        text = text.replace("<!channel>", "@ channel")
+        text = text.replace("@channel", "@ channel")
+        text = text.replace("<!here>", "@ here")
+        text = text.replace("<@here>", "@ here")
+        text = re.sub(r"<!subteam\^(\w+)>", "@ subteam", text)
+        return text
+    
     def render_blocks(self, ranked_responses: RankedResponsesModel) -> list[dict]:
         thread_rid = ranked_responses.thread
         thread_bundle = self.effector.deref(thread_rid, use_network=True)
@@ -45,6 +56,26 @@ class ResponseRankingHandler(KnowledgeHandler):
         thread = thread_bundle.validate_contents(AskCoreThreadModel)
         
         asker_ref = self.effector.deref(thread.asker).contents.get("real_name", f"<@{thread.asker.user_id}>")
+        timestamp = thread_rid.ts.split(".")[0]
+        
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Prompt:*\n> " + self.sanitize_text(thread.prompt)
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"Asked in <#{thread_rid.channel_id}> by *{asker_ref}* on _<!date^{timestamp}^{{date}} at {{time}}|(time unknown)>_ — <{thread.permalink}|Jump to thread>"
+                    }
+                ]
+            }
+        ]
         
         topic_group_names = []
         self.log.debug("Searching topic groups...")
@@ -64,35 +95,15 @@ class ResponseRankingHandler(KnowledgeHandler):
                 
         topic_group_str = " + ".join(topic_group_names)
         if len(topic_group_str) > 0:
-            topic_group_str = "— " + topic_group_str
-        
-        blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*Prompt:*\n> " + thread.prompt
-                }
-            },
-            {
+            blocks.append({
                 "type": "context",
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"Asked by *{asker_ref}* {topic_group_str}"
+                        "text": f"Tagged topic groups — {topic_group_str}"
                     }
                 ]
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"<{thread.permalink}|Jump to thread>"
-                    }
-                ]
-            },
-        ]
+            })
         
         message_map: dict[SlackMessage, list] = {}
         message_map.setdefault(ranked_responses.community_voted.response, []).append("Community Voted :+1:")
@@ -123,7 +134,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": prefix + "> " + response.content
+                        "text": prefix + "> " + self.sanitize_text(response.content)
                     }
                 },
                 {
