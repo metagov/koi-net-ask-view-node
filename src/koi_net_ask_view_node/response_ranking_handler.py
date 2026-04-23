@@ -36,7 +36,7 @@ class ResponseRankingHandler(KnowledgeHandler):
     handler_type = HandlerType.Network
     rid_types = (AskRankedResponses, AskTopicGroup)
     
-    def sanitize_text(self, text: str):
+    def format_text(self, text: str):
         text = text.replace("<!everyone>", "@ everyone")
         text = text.replace("@everyone", "@ everyone")
         text = text.replace("<!channel>", "@ channel")
@@ -44,6 +44,10 @@ class ResponseRankingHandler(KnowledgeHandler):
         text = text.replace("<!here>", "@ here")
         text = text.replace("<@here>", "@ here")
         text = re.sub(r"<!subteam\^(\w+)>", "@ subteam", text)
+        text = "\n".join([
+            "&gt;" + line if line.startswith(("> ", "&gt; ")) else "&gt; " + line
+            for line in text.splitlines()  
+        ])
         return text
     
     def render_blocks(self, ranked_responses: RankedResponsesModel) -> list[dict]:
@@ -63,7 +67,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "*Prompt:*\n> " + self.sanitize_text(thread.prompt)
+                    "text": "*Prompt:*\n> " + self.format_text(thread.prompt)
                 }
             },
             {
@@ -134,7 +138,7 @@ class ResponseRankingHandler(KnowledgeHandler):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": prefix + "> " + self.sanitize_text(response.content)
+                        "text": prefix + "> " + self.format_text(response.content)
                     }
                 },
                 {
